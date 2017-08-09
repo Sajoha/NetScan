@@ -56,11 +56,12 @@ func checkErr(err error) {
 }
 
 func scan(startIP, endIP string) {
+	fmt.Println("Starting scan")
 	timeout := 100 * time.Millisecond
 	startSplit := strings.SplitN(startIP, ".", 4)
-	startRej := startSplit[0] + startSplit[1] + startSplit[2]
+	startRej := fmt.Sprintf("%s.%s.%s", startSplit[0], startSplit[1], startSplit[2])
 	for i := 1; i <= 255; i++ {
-		ip := fmt.Sprintf("192.168.26.%v", i)
+		ip := fmt.Sprintf("%s.%v", startRej, i)
 		ipPort := fmt.Sprintf("%s:1", ip)
 		_, err := net.DialTimeout("tcp", ipPort, timeout)
 		checkNetRes(err, ip)
