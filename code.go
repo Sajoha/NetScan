@@ -13,13 +13,16 @@ import (
 
 func main() {
 	err := ui.Main(func() {
+		message := ui.NewLabel(fmt.Sprintf("Current IP: %s", getIP()))
 		start := ui.NewEntry()
 		end := ui.NewEntry()
 		button := ui.NewButton("Start")
 		box := ui.NewVerticalBox()
+		box.Append(message, false)
 		box.Append(start, false)
 		box.Append(end, false)
 		box.Append(button, false)
+		box.SetPadded(true)
 		window := ui.NewWindow("Port Scan", 200, 100, false)
 		window.SetChild(box)
 		button.OnClicked(func(*ui.Button) {
@@ -39,28 +42,48 @@ func main() {
 	}
 }
 
-func checkNetRes(err error, ip string) {
-	if err != nil {
-		if strings.HasSuffix(err.Error(), "connection refused") {
-			fmt.Printf("Response from %s\n", ip)
-		} else if strings.HasSuffix(err.Error(), "permission denied") {
-			fmt.Printf("Denied by %s\n", ip)
+/*******************************************************************************
+* Retrieve the current IP of the host device on the network. (Not yet tested
+* where multiple networks might be in use).
+*******************************************************************************/
+func getIP() string {
+	addrs, err := net.InterfaceAddrs()
+	checkErr(err)
+
+	for _, ip := range addrs {
+		if ipnet, ok := ip.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String()
+			}
 		}
 	}
+
+	return "N/A"
 }
 
-func checkErr(err error) {
-	if err != nil {
-		fmt.Println(err)
-	}
-}
-
+/*******************************************************************************
+* Takes the two IP addresses, and then scans all IPs between the two to see if
+* the host responds. This dials port 1 of the host to look for a response.
+*
+* Future improvements: • Switch from dialing port 1 to using ICMP
+*											 • Multithread the scan for a faster result
+*******************************************************************************/
 func scan(startIP, endIP string) {
 	fmt.Println("Starting scan")
-	timeout := 100 * time.Millisecond
+	timeout := 50 * time.Millisecond
+
 	startSplit := strings.SplitN(startIP, ".", 4)
+	endSplit := strings.SplitN(endIP, ".", 4)
+
 	startRej := fmt.Sprintf("%s.%s.%s", startSplit[0], startSplit[1], startSplit[2])
-	for i := 1; i <= 255; i++ {
+
+	startVal, err := strconv.Atoi(startSplit[3])
+	checkErr(err)
+
+	endVal, err := strconv.Atoi(endSplit[3])
+	checkErr(err)
+
+	for i := startVal; i <= endVal; i++ {
 		ip := fmt.Sprintf("%s.%v", startRej, i)
 		ipPort := fmt.Sprintf("%s:1", ip)
 		_, err := net.DialTimeout("tcp", ipPort, timeout)
@@ -68,6 +91,31 @@ func scan(startIP, endIP string) {
 	}
 }
 
+/*******************************************************************************
+* Check the response from the dial request for specific types of response.
+*******************************************************************************/
+func checkNetRes(err error, ip string) {
+	if err != nil {
+		if strings.HasSuffix(err.Error(), "connection refused") {
+			fmt.Printf("Response from %s\n", ip)
+		} else if strings.HasSuffix(err.Error(), "permission denied") {
+			fmt.Printf("Denied by %s\n", ip)
+		} else if strings.HasSuffix(err.Error(), "i/o timeout") {
+			// Do Nothing
+		} else {
+			fmt.Printf("A different error: %s\n", err)
+		}
+	}
+}
+
+/*******************************************************************************
+* Takes the two IP addresses, and validate whether they're in a valid format,
+* in a similar subnet and that the IP is legitimate. Runs before the scan to
+* warn the user of issues before the scan starts.
+*
+* Future Improvements: • Allow a more flexible IP input, currently only the last
+*												 chunk can differ
+*******************************************************************************/
 func validate(startIP, endIP string) error {
 	// Validate whether or not the two IPs are in the correct IPv4 format
 	ipExpression := "^([0-9]{1,3})[.]([0-9]{1,3})[.]([0-9]{1,3})[.]([0-9]{1,3})$"
@@ -119,4 +167,13 @@ func validate(startIP, endIP string) error {
 
 	// Everything went well
 	return nil
+}
+
+/*******************************************************************************
+* Lazy error checker, just to save lines elsewhere.
+*******************************************************************************/
+func checkErr(err error) {
+	if err != nil {
+		fmt.Println(err)
+	}
 }
